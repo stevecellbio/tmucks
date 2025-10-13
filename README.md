@@ -1,2 +1,6 @@
 # tmucks
-tmux config manager built in Rust
+tmux config manager built in rust
+
+
+
+installable via source 
