@@ -9,10 +9,11 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Clear, List, ListItem, Paragraph, Padding, Wrap},
+    widgets::{Block, BorderType, Borders, Clear, List, ListItem, Padding, Paragraph, Wrap},
     Frame, Terminal,
 };
 use std::io;
+use std::time::Duration;
 
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Setup terminal
@@ -50,76 +51,81 @@ fn run_app<B: ratatui::backend::Backend>(
         app.update_status_message();
         terminal.draw(|f| ui(f, app))?;
 
-        if let Event::Key(key) = event::read()? {
-            match app.input_mode {
-                InputMode::Normal => match key.code {
-                    KeyCode::Char('q') => return Ok(()),
-                    KeyCode::Char('j')=> app.next(),
-                    KeyCode::Char('k') => app.previous(),
-                    KeyCode::Down => app.next(),
-                    KeyCode::Up => app.previous(),
-                    KeyCode::Enter => {
-                        if let Err(e) = app.apply_config() {
-                            app.set_status_message(format!("- error: {}", e));
-                        }
-                    }
-                    KeyCode::Char('d') => {
-                        if let Err(e) = app.delete_config() {
-                            app.set_status_message(format!("- error: {}", e));
-                        }
-                    }
-                    KeyCode::Char('s') => {
-                        app.input_mode = InputMode::Saving;
-                        app.input_buffer.clear();
-                    }
-                    KeyCode::Char('u') => {
-                        app.start_update_mode();
-                    }
-                    _ => {}
-                },
-                InputMode::Saving => match key.code {
-                    KeyCode::Enter => {
-                        if app.input_buffer.trim().is_empty() {
-                            app.set_status_message(String::from("- error: name cannot be empty"));
-                            app.input_mode = InputMode::Normal;
-                            app.input_buffer.clear();
-                        } else {
-                            let name = if app.input_buffer.ends_with(".conf") {
-                                app.input_buffer.clone()
-                            } else {
-                                format!("{}.conf", app.input_buffer)
-                            };
-                            if let Err(e) = app.save_current_config(&name) {
+        // Poll for events with a timeout to allow periodic UI updates
+        if event::poll(Duration::from_millis(100))? {
+            if let Event::Key(key) = event::read()? {
+                match app.input_mode {
+                    InputMode::Normal => match key.code {
+                        KeyCode::Char('q') => return Ok(()),
+                        KeyCode::Char('j') => app.next(),
+                        KeyCode::Char('k') => app.previous(),
+                        KeyCode::Down => app.next(),
+                        KeyCode::Up => app.previous(),
+                        KeyCode::Enter => {
+                            if let Err(e) = app.apply_config() {
                                 app.set_status_message(format!("- error: {}", e));
                             }
-                            app.input_mode = InputMode::Normal;
+                        }
+                        KeyCode::Char('d') => {
+                            if let Err(e) = app.delete_config() {
+                                app.set_status_message(format!("- error: {}", e));
+                            }
+                        }
+                        KeyCode::Char('s') => {
+                            app.input_mode = InputMode::Saving;
                             app.input_buffer.clear();
                         }
-                    }
-                    KeyCode::Esc => {
-                        app.input_mode = InputMode::Normal;
-                        app.input_buffer.clear();
-                        app.status_message = app.default_status_message.clone();
-                    }
-                    KeyCode::Char(c) => {
-                        app.input_buffer.push(c);
-                    }
-                    KeyCode::Backspace => {
-                        app.input_buffer.pop();
-                    }
-                    _ => {}
-                },
-                InputMode::UpdateConfirm => match key.code {
-                    KeyCode::Char('y') | KeyCode::Char('Y') => {
-                        if let Err(e) = app.confirm_update() {
-                            app.set_status_message(format!("- error: {}", e));
+                        KeyCode::Char('u') => {
+                            app.start_update_mode();
                         }
-                    }
-                    KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
-                        app.cancel_update();
-                    }
-                    _ => {}
-                },
+                        _ => {}
+                    },
+                    InputMode::Saving => match key.code {
+                        KeyCode::Enter => {
+                            if app.input_buffer.trim().is_empty() {
+                                app.set_status_message(String::from(
+                                    "- error: name cannot be empty",
+                                ));
+                                app.input_mode = InputMode::Normal;
+                                app.input_buffer.clear();
+                            } else {
+                                let name = if app.input_buffer.ends_with(".conf") {
+                                    app.input_buffer.clone()
+                                } else {
+                                    format!("{}.conf", app.input_buffer)
+                                };
+                                if let Err(e) = app.save_current_config(&name) {
+                                    app.set_status_message(format!("- error: {}", e));
+                                }
+                                app.input_mode = InputMode::Normal;
+                                app.input_buffer.clear();
+                            }
+                        }
+                        KeyCode::Esc => {
+                            app.input_mode = InputMode::Normal;
+                            app.input_buffer.clear();
+                            app.status_message = app.default_status_message.clone();
+                        }
+                        KeyCode::Char(c) => {
+                            app.input_buffer.push(c);
+                        }
+                        KeyCode::Backspace => {
+                            app.input_buffer.pop();
+                        }
+                        _ => {}
+                    },
+                    InputMode::UpdateConfirm => match key.code {
+                        KeyCode::Char('y') | KeyCode::Char('Y') => {
+                            if let Err(e) = app.confirm_update() {
+                                app.set_status_message(format!("- error: {}", e));
+                            }
+                        }
+                        KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+                            app.cancel_update();
+                        }
+                        _ => {}
+                    },
+                }
             }
         }
     }
@@ -128,13 +134,13 @@ fn run_app<B: ratatui::backend::Backend>(
 fn ui(f: &mut Frame, app: &mut App) {
     // Create main layout with padding
     let main_area = f.size().inner(&Margin::new(2, 1));
-    
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(5),  // Header
-            Constraint::Min(0),     // Main content
-            Constraint::Length(4),  // Footer/Status
+            Constraint::Length(5), // Header
+            Constraint::Min(0),    // Main content
+            Constraint::Length(4), // Footer/Status
         ])
         .split(main_area);
 
@@ -156,10 +162,7 @@ fn ui(f: &mut Frame, app: &mut App) {
 fn render_header(f: &mut Frame, app: &mut App, area: Rect) {
     let header_chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Min(40),
-            Constraint::Length(30),
-        ])
+        .constraints([Constraint::Min(40), Constraint::Length(30)])
         .split(area);
 
     // Title
@@ -167,7 +170,7 @@ fn render_header(f: &mut Frame, app: &mut App, area: Rect) {
         .style(
             Style::default()
                 .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD)
+                .add_modifier(Modifier::BOLD),
         )
         .block(
             Block::default()
@@ -178,17 +181,18 @@ fn render_header(f: &mut Frame, app: &mut App, area: Rect) {
                 .title_style(
                     Style::default()
                         .fg(Color::Yellow)
-                        .add_modifier(Modifier::BOLD)
-                )
+                        .add_modifier(Modifier::BOLD),
+                ),
         )
         .alignment(Alignment::Center);
     f.render_widget(title, header_chunks[0]);
 
     // Stats
     let stats_text = if app.config_manager.configs.is_empty() {
-        vec![
-            Line::from(Span::styled("no configs", Style::default().fg(Color::Red))),
-        ]
+        vec![Line::from(Span::styled(
+            "no configs",
+            Style::default().fg(Color::Red),
+        ))]
     } else {
         let selected = app.list_state.selected().unwrap_or(0) + 1;
         vec![
@@ -196,14 +200,18 @@ fn render_header(f: &mut Frame, app: &mut App, area: Rect) {
                 Span::styled("configs: ", Style::default().fg(Color::Gray)),
                 Span::styled(
                     format!("{}", app.config_manager.configs.len()),
-                    Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
                 ),
             ]),
             Line::from(vec![
                 Span::styled("selected: ", Style::default().fg(Color::Gray)),
                 Span::styled(
                     format!("{}/{}", selected, app.config_manager.configs.len()),
-                    Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(Color::Blue)
+                        .add_modifier(Modifier::BOLD),
                 ),
             ]),
         ]
@@ -215,7 +223,7 @@ fn render_header(f: &mut Frame, app: &mut App, area: Rect) {
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Blue))
                 .border_type(BorderType::Rounded)
-                .title("stats")
+                .title("stats"),
         )
         .alignment(Alignment::Center);
     f.render_widget(stats, header_chunks[1]);
@@ -225,20 +233,25 @@ fn render_main_content(f: &mut Frame, app: &mut App, area: Rect) {
     if app.config_manager.configs.is_empty() {
         let empty_content = vec![
             Line::from(""),
-            Line::from(vec![
-                Span::raw(" no configuration files found"),
-            ]),
+            Line::from(vec![Span::raw(" no configuration files found")]),
             Line::from(""),
             Line::from("add your first config:"),
             Line::from(vec![
                 Span::styled("  $ ", Style::default().fg(Color::Cyan)),
-                Span::styled("cp ~/.tmux.conf ~/.config/tmucks/default.conf", 
-                    Style::default().fg(Color::Green)),
+                Span::styled(
+                    "cp ~/.tmux.conf ~/.config/tmucks/default.conf",
+                    Style::default().fg(Color::Green),
+                ),
             ]),
             Line::from(""),
             Line::from(vec![
                 Span::styled("press ", Style::default().fg(Color::Yellow)),
-                Span::styled("s", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "s",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::raw(" to save current config"),
             ]),
         ];
@@ -251,7 +264,7 @@ fn render_main_content(f: &mut Frame, app: &mut App, area: Rect) {
                     .border_style(Style::default().fg(Color::Gray))
                     .border_type(BorderType::Rounded)
                     .title(" configurations ")
-                    .title_style(Style::default().fg(Color::Yellow))
+                    .title_style(Style::default().fg(Color::Yellow)),
             )
             .alignment(Alignment::Center)
             .wrap(Wrap { trim: true });
@@ -265,7 +278,12 @@ fn render_main_content(f: &mut Frame, app: &mut App, area: Rect) {
             .map(|(i, name)| {
                 let is_selected = app.list_state.selected() == Some(i);
                 let (icon, style) = if is_selected {
-                    ("▶", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))
+                    (
+                        "▶",
+                        Style::default()
+                            .fg(Color::Green)
+                            .add_modifier(Modifier::BOLD),
+                    )
                 } else {
                     ("  ", Style::default().fg(Color::White))
                 };
@@ -275,11 +293,17 @@ fn render_main_content(f: &mut Frame, app: &mut App, area: Rect) {
                     Span::raw(" "),
                     Span::styled(
                         name,
-                        Style::default().fg(if name.ends_with(".conf") { 
-                            Color::Cyan 
-                        } else { 
-                            Color::White 
-                        }).add_modifier(if is_selected { Modifier::BOLD } else { Modifier::empty() })
+                        Style::default()
+                            .fg(if name.ends_with(".conf") {
+                                Color::Cyan
+                            } else {
+                                Color::White
+                            })
+                            .add_modifier(if is_selected {
+                                Modifier::BOLD
+                            } else {
+                                Modifier::empty()
+                            }),
                     ),
                 ]);
                 ListItem::new(content)
@@ -293,7 +317,7 @@ fn render_main_content(f: &mut Frame, app: &mut App, area: Rect) {
                     .border_style(Style::default().fg(Color::Blue))
                     .border_type(BorderType::Rounded)
                     .title(" configurations ")
-                    .title_style(Style::default().fg(Color::Yellow))
+                    .title_style(Style::default().fg(Color::Yellow)),
             )
             .highlight_style(
                 Style::default()
@@ -310,10 +334,7 @@ fn render_main_content(f: &mut Frame, app: &mut App, area: Rect) {
 fn render_footer(f: &mut Frame, app: &mut App, area: Rect) {
     let footer_chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Min(0),
-            Constraint::Length(30),
-        ])
+        .constraints([Constraint::Min(0), Constraint::Length(30)])
         .split(area);
 
     // Status / Input area
@@ -351,46 +372,85 @@ fn render_footer(f: &mut Frame, app: &mut App, area: Rect) {
                 .border_style(Style::default().fg(status_color))
                 .border_type(BorderType::Rounded)
                 .title(" status ")
-                .title_style(Style::default().fg(Color::Yellow))
+                .title_style(Style::default().fg(Color::Yellow)),
         );
     f.render_widget(status, footer_chunks[0]);
 
     // Help / Keybindings
     let help_text = if app.input_mode == InputMode::Normal {
-        vec![
-            Line::from(vec![
-                Span::styled("j/k", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                Span::raw(" navigate "),
-                Span::styled("enter", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-                Span::raw(" apply "),
-                Span::styled("s", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-                Span::raw(" save "),
-                Span::styled("u", Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD)),
-                Span::raw(" update "),
-                Span::styled("d", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
-                Span::raw(" delete "),
-                Span::styled("q", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
-                Span::raw(" quit"),
-            ])
-        ]
+        vec![Line::from(vec![
+            Span::styled(
+                "j/k",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" navigate "),
+            Span::styled(
+                "enter",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" apply "),
+            Span::styled(
+                "s",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" save "),
+            Span::styled(
+                "u",
+                Style::default()
+                    .fg(Color::Blue)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" update "),
+            Span::styled(
+                "d",
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" delete "),
+            Span::styled(
+                "q",
+                Style::default()
+                    .fg(Color::Magenta)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" quit"),
+        ])]
     } else if app.input_mode == InputMode::Saving {
-        vec![
-            Line::from(vec![
-                Span::styled("enter", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-                Span::raw(" save "),
-                Span::styled("esc", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
-                Span::raw(" cancel"),
-            ])
-        ]
-    } else { // UpdateConfirm
-        vec![
-            Line::from(vec![
-                Span::styled("y", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-                Span::raw(" confirm "),
-                Span::styled("n/esc", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
-                Span::raw(" cancel"),
-            ])
-        ]
+        vec![Line::from(vec![
+            Span::styled(
+                "enter",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" save "),
+            Span::styled(
+                "esc",
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" cancel"),
+        ])]
+    } else {
+        // UpdateConfirm
+        vec![Line::from(vec![
+            Span::styled(
+                "y",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" confirm "),
+            Span::styled(
+                "n/esc",
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" cancel"),
+        ])]
     };
 
     let help = Paragraph::new(help_text)
@@ -401,7 +461,7 @@ fn render_footer(f: &mut Frame, app: &mut App, area: Rect) {
                 .border_style(Style::default().fg(Color::Gray))
                 .border_type(BorderType::Rounded)
                 .title(" keys ")
-                .title_style(Style::default().fg(Color::Yellow))
+                .title_style(Style::default().fg(Color::Yellow)),
         )
         .alignment(Alignment::Center);
     f.render_widget(help, footer_chunks[1]);
@@ -409,38 +469,54 @@ fn render_footer(f: &mut Frame, app: &mut App, area: Rect) {
 
 fn render_update_popup(f: &mut Frame, app: &mut App) {
     let popup_area = centered_rect(60, 25, f.size());
-    
+
     // Create a subtle background overlay
-    let background = Block::default()
-        .style(Style::default().bg(Color::Black));
+    let background = Block::default().style(Style::default().bg(Color::Black));
     f.render_widget(background, f.size());
-    
+
     // Popup content
     let popup_content = if let Some(config_name) = &app.pending_update_config {
         vec![
             Line::from(""),
-            Line::from(vec![
-                Span::styled("confirm update", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-            ]),
+            Line::from(vec![Span::styled(
+                "confirm update",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )]),
             Line::from(""),
             Line::from(vec![
                 Span::styled("config: ", Style::default().fg(Color::Gray)),
-                Span::styled(config_name, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    config_name,
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
             ]),
             Line::from(""),
             Line::from("this will overwrite the saved config with:"),
-            Line::from(vec![
-                Span::styled("~/.tmux.conf", Style::default().fg(Color::Green)),
-            ]),
+            Line::from(vec![Span::styled(
+                "~/.tmux.conf",
+                Style::default().fg(Color::Green),
+            )]),
             Line::from(""),
             Line::from(""),
             Line::from(vec![
                 Span::styled("[", Style::default().fg(Color::Gray)),
-                Span::styled("y", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "y",
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("]es", Style::default().fg(Color::White)),
                 Span::raw("  "),
                 Span::styled("[", Style::default().fg(Color::Gray)),
-                Span::styled("n", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "n",
+                    Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("]o", Style::default().fg(Color::White)),
                 Span::raw("  "),
                 Span::styled("[esc]", Style::default().fg(Color::Red)),
@@ -464,18 +540,22 @@ fn render_update_popup(f: &mut Frame, app: &mut App) {
                 .title_style(
                     Style::default()
                         .fg(Color::Yellow)
-                        .add_modifier(Modifier::BOLD)
+                        .add_modifier(Modifier::BOLD),
                 )
-                .padding(Padding::new(1, 0, 1, 0))
+                .padding(Padding::new(1, 0, 1, 0)),
         )
         .style(Style::default().bg(Color::Black).fg(Color::White))
         .alignment(Alignment::Center);
-    
+
     f.render_widget(Clear, popup_area); // Clear the area for the popup
     f.render_widget(popup, popup_area);
 }
 
-fn centered_rect(percent_x: u16, percent_y: u16, r: ratatui::layout::Rect) -> ratatui::layout::Rect {
+fn centered_rect(
+    percent_x: u16,
+    percent_y: u16,
+    r: ratatui::layout::Rect,
+) -> ratatui::layout::Rect {
     let popup_layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
