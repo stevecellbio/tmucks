@@ -16,6 +16,8 @@ pub enum Commands {
     Apply { name: String },
     /// Save current tmux config with a name
     Save { name: String },
+    /// Update an existing config with current tmux config
+    Update { name: String },
     /// Delete a config by name
     Delete { name: String },
 }

@@ -35,6 +35,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             config_manager.save_current_config(&config_name)?;
             println!("✓ Saved current config as: {}", config_name);
         }
+        Some(Commands::Update { name }) => {
+            let config_manager = ConfigManager::new()?;
+            let config_name = ensure_conf_extension(name);
+            config_manager.update_config(&config_name)?;
+            println!("+ updated config: {}", config_name);
+        }
         Some(Commands::Delete { name }) => {
             let config_manager = ConfigManager::new()?;
             let config_name = ensure_conf_extension(name);
