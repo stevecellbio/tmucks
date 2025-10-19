@@ -376,7 +376,7 @@ fn render_footer(f: &mut Frame, app: &mut App, area: Rect) {
     } else if app.input_mode == InputMode::Saving {
         vec![
             Line::from(vec![
-                Span::styled("Enter", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                Span::styled("enter", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
                 Span::raw(" save "),
                 Span::styled("esc", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
                 Span::raw(" cancel"),
