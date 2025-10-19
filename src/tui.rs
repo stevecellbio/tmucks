@@ -71,7 +71,6 @@ fn run_app<B: ratatui::backend::Backend>(
                     KeyCode::Char('s') => {
                         app.input_mode = InputMode::Saving;
                         app.input_buffer.clear();
-                        app.status_message = String::from("enter config name (without .conf): ");
                     }
                     KeyCode::Char('u') => {
                         app.start_update_mode();
