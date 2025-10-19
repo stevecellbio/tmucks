@@ -1,7 +1,4 @@
-use std::{
-    fs,
-    path::PathBuf,
-};
+use std::{fs, path::PathBuf};
 
 pub struct ConfigManager {
     pub configs: Vec<String>,
@@ -14,7 +11,7 @@ impl ConfigManager {
         // Get config directory: ~/.config/tmucks/
         let home = dirs::home_dir().ok_or("Could not find home directory")?;
         let config_dir = home.join(".config").join("tmucks");
-        
+
         // Create config directory if it doesn't exist
         if !config_dir.exists() {
             fs::create_dir_all(&config_dir)?;
@@ -35,12 +32,12 @@ impl ConfigManager {
 
     fn read_configs(dir: &PathBuf) -> Result<Vec<String>, Box<dyn std::error::Error>> {
         let mut configs = Vec::new();
-        
+
         if dir.exists() {
             for entry in fs::read_dir(dir)? {
                 let entry = entry?;
                 let path = entry.path();
-                
+
                 if path.is_file() {
                     if let Some(name) = path.file_name() {
                         if let Some(name_str) = name.to_str() {
@@ -57,7 +54,7 @@ impl ConfigManager {
 
     pub fn apply_config(&self, config_name: &str) -> Result<(), Box<dyn std::error::Error>> {
         let source_path = self.config_dir.join(config_name);
-        
+
         if !source_path.exists() {
             return Err(format!("Config file not found: {}", config_name).into());
         }
@@ -66,16 +63,18 @@ impl ConfigManager {
         fs::copy(&source_path, &self.tmux_config_path)?;
 
         // Reload tmux config if tmux is running
-        let _ = std::process::Command::new("tmux")
-            .args(["source-file", self.tmux_config_path.to_str().unwrap()])
-            .output();
+        if let Some(path_str) = self.tmux_config_path.to_str() {
+            let _ = std::process::Command::new("tmux")
+                .args(["source-file", path_str])
+                .output();
+        }
 
         Ok(())
     }
 
     pub fn delete_config(&self, config_name: &str) -> Result<(), Box<dyn std::error::Error>> {
         let config_path = self.config_dir.join(config_name);
-        
+
         if !config_path.exists() {
             return Err(format!("Config file not found: {}", config_name).into());
         }
@@ -90,8 +89,32 @@ impl ConfigManager {
         }
 
         let dest_path = self.config_dir.join(config_name);
-        fs::copy(&self.tmux_config_path, &dest_path)?;
         
+        // Check if config already exists
+        if dest_path.exists() {
+            return Err(format!("Config '{}' already exists. Use 'update' command to overwrite an existing config.", config_name).into());
+        }
+        
+        fs::copy(&self.tmux_config_path, &dest_path)?;
+
+        Ok(())
+    }
+
+    pub fn update_config(&self, config_name: &str) -> Result<(), Box<dyn std::error::Error>> {
+        if !self.tmux_config_path.exists() {
+            return Err("No tmux config file found at ~/.tmux.conf".into());
+        }
+
+        let dest_path = self.config_dir.join(config_name);
+        
+        // Check if config exists
+        if !dest_path.exists() {
+            return Err(format!("Config '{}' does not exist. Use 'save' command to create a new config.", config_name).into());
+        }
+        
+        // Copy current .tmux.conf to the selected config file (overwriting it)
+        fs::copy(&self.tmux_config_path, &dest_path)?;
+
         Ok(())
     }
 }
