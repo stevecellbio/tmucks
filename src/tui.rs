@@ -100,7 +100,7 @@ fn run_app<B: ratatui::backend::Backend>(
                     KeyCode::Esc => {
                         app.input_mode = InputMode::Normal;
                         app.input_buffer.clear();
-                        app.status_message = String::from("Use j/k to navigate, Enter to apply config, 's' to save current, 'u' to update existing, 'd' to delete, 'q' to quit");
+                        app.status_message = app.default_status_message.clone();
                     }
                     KeyCode::Char(c) => {
                         app.input_buffer.push(c);
