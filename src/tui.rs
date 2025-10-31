@@ -243,7 +243,7 @@ fn render_main_content(f: &mut Frame, app: &mut App, area: Rect) {
                     Style::default().fg(Color::Green),
                 ),
             ]),
-            Line::from(""),
+            Line::from("or"),
             Line::from(vec![
                 Span::styled("press ", Style::default().fg(Color::Yellow)),
                 Span::styled(

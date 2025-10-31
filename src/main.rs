@@ -5,7 +5,7 @@ mod cli;
 mod config;
 mod tui;
 
-use cli::{Cli, Commands, ensure_conf_extension};
+use cli::{ensure_conf_extension, Cli, Commands};
 use config::ConfigManager;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -16,6 +16,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let config_manager = ConfigManager::new()?;
             if config_manager.configs.is_empty() {
                 println!("No configs found in ~/.config/tmucks/");
+                println!("Try setting a config using the update flag!");
             } else {
                 println!("Available configs:");
                 for config in &config_manager.configs {
